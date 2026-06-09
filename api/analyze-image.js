@@ -1,16 +1,8 @@
 // api/analyze-image.js
 import { Service } from '@volcengine/openapi';
 
-// 1. 从环境变量中获取火山引擎的密钥
-const VOLC_ACCESS_KEY = process.env.VOLC_ACCESS_KEY;
-const VOLC_SECRET_KEY = process.env.VOLC_SECRET_KEY;
-
-// 如果你还没有配置环境变量，可以先用明文变量，但上线前请务必迁移！
-// const VOLC_ACCESS_KEY = "你的Volc_Access_Key";
-// const VOLC_SECRET_KEY = "你的Volc_Secret_Key";
-
 export default async function handler(req, res) {
-  // 1. 仅允许POST请求
+  // 1. 仅允许 POST 请求
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -19,13 +11,17 @@ export default async function handler(req, res) {
 
   // 2. 检查必要参数
   if (!imageBase64) {
-    return res.status(400).json({ error: 'Missing image data' });
+    return res.status(400). json({ error: 'Missing image data' });
   }
 
-  // 3. 检查密钥是否配置
-  if (!VOLC_ACCESS_KEY || !VOLC_SECRET_KEY) {
-    console.error('Volcano Engine credentials are not configured.');
-    return res.status(500).json({ error: 'Server configuration error: missing API credentials.' });
+  // 3. 从环境变量读取火山引擎凭证和接入点ID
+  const accessKey = process.env.VOLC_ACCESS_KEY;
+  const secretKey = process.env.VOLC_SECRET_KEY;
+  const endpointId = process.env.VOLC_ENDPOINT_ID;
+
+  if (!accessKey || !secretKey || !endpointId) {
+    console.error('Missing volcano engine credentials');
+    return res.status(500).json({ error: 'Server configuration error: missing API credentials' });
   }
 
   try {
@@ -34,20 +30,20 @@ export default async function handler(req, res) {
       host: 'ark.cn-beijing.volces.com',
       serviceName: 'ark',
       region: 'cn-beijing',
-      accessKeyId: VOLC_ACCESS_KEY,
-      secretAccessKey: VOLC_SECRET_KEY,
+      accessKeyId: accessKey,
+      secretAccessKey: secretKey,
     });
 
-    // 5. 构建符合火山引擎OpenAI兼容接口的请求体
+    // 5. 构建请求体（使用 endpointId 作为模型）
     const requestBody = {
-      model: 'VOLC_ENDPOINT_ID', // 使用我们开通的模型
+      model: endpointId,   // 直接使用推理接入点ID
       messages: [
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: '请从这张照片中提取出运动数据，以纯JSON格式返回，不要包含其他任何解释文字。只提取照片中明确显示的数字和单位。需要包含以下字段：distance_km（公里数），duration_min（分钟数），avg_heart_rate（平均心率）。如果照片中没有明确显示某字段，就返回null。示例输出格式：{"distance_km": 5.0, "duration_min": 30, "avg_heart_rate": 145}'
+              text: '请从这张照片中提取运动数据，以纯JSON格式返回，不要包含其他解释文字。只提取照片中明确显示的数字和单位。需要包含以下字段：distance_km（公里数）、duration_min（分钟数）、avg_heart_rate（平均心率）。如果照片中没有明确显示某字段，就返回null。示例输出格式：{"distance_km": 5.0, "duration_min": 30, "avg_heart_rate": 145}'
             },
             {
               type: 'image_url',
@@ -82,7 +78,6 @@ export default async function handler(req, res) {
     // 7. 解析AI返回的JSON字符串
     let parsedData;
     try {
-      // 从内容中提取JSON部分（防止AI返回多余文字）
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       parsedData = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content);
     } catch (e) {
@@ -98,7 +93,6 @@ export default async function handler(req, res) {
     };
 
     res.status(200).json(result);
-
   } catch (error) {
     console.error('Serverless function error:', error);
     res.status(500).json({ error: `Internal server error: ${error.message}` });
