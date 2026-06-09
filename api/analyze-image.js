@@ -40,7 +40,7 @@ export default async function handler(req, res) {
 
     // 5. 构建符合火山引擎OpenAI兼容接口的请求体
     const requestBody = {
-      model: 'doubao-vision-pro-32k', // 使用我们开通的模型
+      model: 'VOLC_ENDPOINT_ID', // 使用我们开通的模型
       messages: [
         {
           role: 'user',
