@@ -1,4 +1,6 @@
+// api/analyze-image.js
 export default async function handler(req, res) {
+  // 只接受 POST 请求
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -13,8 +15,14 @@ export default async function handler(req, res) {
     {
       role: 'user',
       content: [
-        { type: 'text', text: '请分析这张健身设备照片，提取距离(公里)、时长(分钟)、平均心率(次/分)。只返回JSON，例如：{"distance":5.2,"duration":30,"heartrate":145}。缺失字段返回null。' },
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+        {
+          type: 'text',
+          text: '请分析这张健身设备照片（跑步机、划船机、骑行台等），从中提取以下数据：距离（公里）、时长（分钟）、平均心率（次/分）。如果图片中没有某项数据，就返回 null。请以 JSON 格式返回，例如：{"distance": 5.2, "duration": 30, "heartrate": 145}。只返回 JSON，不要有其他文字。'
+        },
+        {
+          type: 'image_url',
+          image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
+        }
       ]
     }
   ];
@@ -28,7 +36,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: model || 'deepseek-v4-flash',
-        messages,
+        messages: messages,
         max_tokens: 300,
         temperature: 0.2
       })
@@ -49,10 +57,11 @@ export default async function handler(req, res) {
     // 提取 JSON
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     let parsed;
-    if (jsonMatch) {
-      parsed = JSON.parse(jsonMatch[0]);
-    } else {
-      parsed = JSON.parse(content);
+    try {
+      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content);
+    } catch (e) {
+      console.error('JSON parse error:', content);
+      return res.status(500).json({ error: 'Invalid JSON response from AI' });
     }
 
     const result = {
@@ -63,7 +72,7 @@ export default async function handler(req, res) {
 
     res.status(200).json(result);
   } catch (error) {
-    console.error('Serverless error:', error);
+    console.error('Serverless function error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
