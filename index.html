@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>健身仪表盘 V2.0 · 多模态 + TDEE + 体脂钳</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#0f1117;--bg2:#181a24;--bg3:#1e2130;--card:#1c1f2e;--border:#2a2d3e;--text:#e4e6f0;--text2:#9499b3;--primary:#6c5ce7;--primary2:#a29bfe;--accent:#00cec9;--danger:#ff6b6b;--success:#00b894;--warning:#fdcb6e;--radius:12px;--shadow:0 4px 24px rgba(0,0,0,.3)}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+#loading-overlay{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity .4s}
+#loading-overlay.hide{opacity:0;pointer-events:none}
+.spinner{width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#auth-page{display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f1117 0%,#1a1c2e 50%,#0f1117 100%)}
+#auth-page.show{display:flex}
+.auth-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:40px;width:400px;max-width:95vw;box-shadow:var(--shadow)}
+.auth-box h1{text-align:center;margin-bottom:8px;font-size:1.6rem}
+.auth-box p.sub{text-align:center;color:var(--text2);margin-bottom:28px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:6px;color:var(--text2);font-size:.9rem}
+.form-input{width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);outline:none;transition:border-color .2s}
+.form-input:focus{border-color:var(--primary)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:600;transition:all .2s;color:#fff}
+.btn-primary{background:var(--primary)}.btn-primary:hover{background:#5a4bd6}
+.btn-accent{background:var(--accent);color:#000}.btn-accent:hover{background:#00b8b3}
+.btn-danger{background:var(--danger)}.btn-danger:hover{background:#e55555}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}.btn-outline:hover{border-color:var(--primary);color:var(--text)}
+.btn-sm{padding:6px 12px;font-size:.85rem}
+.btn-full{width:100%}
+.auth-toggle{text-align:center;margin-top:16px;color:var(--text2);font-size:.9rem}
+.auth-toggle a{cursor:pointer}
+.auth-error{color:var(--danger);font-size:.85rem;margin-top:8px;text-align:center;min-height:20px}
+#app{display:none}#app.show{display:block}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(15,17,23,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.topbar h1{font-size:1.2rem;background:linear-gradient(90deg,var(--primary2),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.user-info{color:var(--text2);font-size:.9rem}
+.nav-tabs{display:flex;gap:4px;padding:12px 24px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.nav-tab{padding:8px 18px;border-radius:8px;cursor:pointer;color:var(--text2);font-weight:500;transition:all .2s;white-space:nowrap;border:none;background:none;font-size:.95rem}
+.nav-tab:hover{color:var(--text);background:var(--bg3)}
+.nav-tab.active{color:#fff;background:var(--primary)}
+.content{padding:24px;max-width:1400px;margin:0 auto}
+.tab-panel{display:none;animation:fadeIn .3s}
+.tab-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px;box-shadow:var(--shadow)}
+.card h2{font-size:1.15rem;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.card h2 .icon{font-size:1.3rem}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.form-row .form-group{flex:1;min-width:120px;margin-bottom:0}
+.body-model-wrap{display:flex;align-items:center;justify-content:center;padding:16px;position:relative}
+#bodyCanvas{cursor:pointer}
+.metrics-history{margin-top:16px;overflow-x:auto}
+.metrics-history table{width:100%;border-collapse:collapse;font-size:.9rem}
+.metrics-history th,.metrics-history td{padding:8px 12px;text-align:center;border-bottom:1px solid var(--border)}
+.metrics-history th{color:var(--text2);font-weight:500}
+.metrics-history tr:hover td{background:var(--bg3)}
+.delete-btn{color:var(--danger);cursor:pointer;background:none;border:none;font-size:1rem}
+.workout-list{margin-top:16px}
+.workout-item{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.workout-item:hover{border-color:var(--primary)}
+.workout-item .info{display:flex;flex-direction:column;gap:2px}
+.workout-item .info .name{font-weight:600}
+.workout-item .info .detail{color:var(--text2);font-size:.85rem}
+.workout-item .actions{display:flex;gap:8px}
+#toast-container{position:fixed;top:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 20px;border-radius:8px;color:#fff;font-size:.9rem;animation:slideIn .3s;min-width:200px;box-shadow:var(--shadow)}
+.toast.success{background:var(--success)}.toast.error{background:var(--danger)}.toast.info{background:var(--primary)}
+@keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+.ai-output{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;min-height:120px;white-space:pre-wrap;line-height:1.7;color:var(--text);font-size:.95rem}
+.chart-box{width:100%;height:350px}
+.empty-state{text-align:center;padding:40px;color:var(--text2)}
+.empty-state .emoji{font-size:2.5rem;margin-bottom:12px}
+.tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.8rem;background:var(--bg3);color:var(--primary2);border:1px solid var(--border)}
+.protocol-warning{background:#ff6b6b20;border:1px solid var(--danger);border-radius:var(--radius);padding:16px;margin-bottom:20px;text-align:center}
+.protocol-warning code{background:var(--bg3);padding:4px 8px;border-radius:6px;font-family:monospace}
+.history-suggestions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.history-suggestions span{background:var(--bg3);padding:4px 10px;border-radius:20px;font-size:.8rem;cursor:pointer;border:1px solid var(--border);transition:all .2s}
+.history-suggestions span:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
+.skinfold-group{display:flex;gap:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="loading-overlay"><div class="spinner"></div><div style="color:var(--text2)">加载中...</div></div>
+<div id="toast-container"></div>
+
+<div id="auth-page">
+  <div class="auth-box">
+    <h1>🏋️ 健身仪表盘 V2.0</h1>
+    <p class="sub">多模态 · TDEE · 体脂钳</p>
+    <div id="protocol-warning" style="display:none" class="protocol-warning">
+      ⚠️ 检测到您使用 <code>file://</code> 协议打开页面<br>
+      请使用 <code>python -m http.server 8080</code> 启动本地服务器访问。
+    </div>
+    <div id="auth-form-login">
+      <div class="form-group"><label>邮箱</label><input type="email" id="login-email" class="form-input" placeholder="your@email.com"></div>
+      <div class="form-group"><label>密码</label><input type="password" id="login-password" class="form-input" placeholder="••••••••"></div>
+      <button class="btn btn-primary btn-full" id="login-btn">登 录</button>
+      <div class="auth-toggle">还没有账号？<a id="show-register">立即注册</a></div>
+    </div>
+    <div id="auth-form-register" style="display:none">
+      <div class="form-group"><label>邮箱</label><input type="email" id="reg-email" class="form-input" placeholder="your@email.com"></div>
+      <div class="form-group"><label>密码（至少6位）</label><input type="password" id="reg-password" class="form-input" placeholder="••••••••"></div>
+      <button class="btn btn-accent btn-full" id="register-btn">注 册</button>
+      <div class="auth-toggle">已有账号？<a id="show-login">去登录</a></div>
+    </div>
+    <div id="auth-error" class="auth-error"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <h1>🏋️ 健身仪表盘 V2.0</h1>
+    <div class="topbar-right">
+      <span class="user-info" id="user-email-display"></span>
+      <button class="btn btn-outline btn-sm" id="logout-btn">退出登录</button>
+    </div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-tab="dashboard">📊 仪表盘</button>
+    <button class="nav-tab" data-tab="body">🧍 身体指标</button>
+    <button class="nav-tab" data-tab="strength">💪 力量训练</button>
+    <button class="nav-tab" data-tab="cardio">🏃 有氧训练</button>
+    <button class="nav-tab" data-tab="tdee">⚡ TDEE</button>
+    <button class="nav-tab" data-tab="ai">🤖 AI 分析</button>
+  </div>
+  <div class="content">
+    <div id="tab-dashboard" class="tab-panel active">
+      <div class="grid-2"><div class="card"><h2>⚖️ 体重 / 体脂变化</h2><div id="chart-weight" class="chart-box"></div></div><div class="card"><h2>📈 训练量趋势</h2><div id="chart-volume" class="chart-box"></div></div></div>
+      <div class="grid-2"><div class="card"><h2>🏃 累计有氧距离</h2><div id="chart-cardio" class="chart-box"></div></div><div class="card"><h2>📋 近期记录</h2><div id="recent-activities" style="max-height:350px;overflow-y:auto"></div></div></div>
+    </div>
+    <div id="tab-body" class="tab-panel">
+      <div class="grid-2">
+        <div class="card"><h2>🧍 人体模型（点击部位记录围度）</h2><div class="body-model-wrap"><canvas id="bodyCanvas" width="300" height="520"></canvas></div></div>
+        <div class="card"><h2>📝 记录身体指标</h2>
+          <div class="form-row"><div class="form-group"><label>日期</label><input type="date" id="m-date" class="form-input"></div><div class="form-group"><label>性别</label><select id="m-gender" class="form-input"><option value="male">男</option><option value="female">女</option></select></div></div>
+          <div class="form-row"><div class="form-group"><label>身高 (cm)</label><input type="number" id="m-height" step="0.1" class="form-input"></div><div class="form-group"><label>体重 (kg)</label><input type="number" id="m-weight" step="0.1" class="form-input"></div></div>
+          <div class="form-row"><div class="form-group"><label>胸围 (cm)</label><input type="number" id="m-chest" step="0.1" class="form-input"></div><div class="form-group"><label>腰围 (cm)</label><input type="number" id="m-waist" step="0.1" class="form-input"></div><div class="form-group"><label>臀围 (cm)</label><input type="number" id="m-hip" step="0.1" class="form-input"></div></div>
+          <div class="form-row"><div class="form-group"><label>直臂围 (cm)</label><input type="number" id="m-arm-s" step="0.1" class="form-input"></div><div class="form-group"><label>屈臂围 (cm)</label><input type="number" id="m-arm-f" step="0.1" class="form-input"></div><div class="form-group"><label>大腿围 (cm)</label><input type="number" id="m-thigh" step="0.1" class="form-input"></div></div>
+          <div style="margin:16px 0 8px;font-weight:600">体脂钳测量 (mm)</div>
+          <div id="skinfold-fields"></div>
+          <div class="form-row"><div class="form-group"><label>估算体脂率 (%)</label><input type="number" id="m-bodyfat" step="0.1" class="form-input" placeholder="自动计算" readonly></div></div>
+          <button class="btn btn-primary" id="save-body-btn">💾 保存指标</button>
+        </div>
+      </div>
+      <div class="card"><h2>📊 围度变化曲线</h2><div id="chart-girth" class="chart-box"></div></div>
+      <div class="card"><h2>📋 历史记录（对比箭头）</h2><div id="metrics-table-wrap" class="metrics-history"></div></div>
+    </div>
+    <div id="tab-strength" class="tab-panel">
+      <div class="card"><h2>💪 添加力量训练</h2>
+        <div class="form-row"><div class="form-group"><label>日期</label><input type="date" id="s-date" class="form-input"></div><div class="form-group"><label>动作名称</label><input type="text" id="s-action" class="form-input" placeholder="深蹲、卧推..."><div id="s-action-history" class="history-suggestions"></div></div></div>
+        <div class="form-row"><div class="form-group"><label>重量 (kg)</label><input type="number" id="s-weight" step="0.5" class="form-input"></div><div class="form-group"><label>组数</label><input type="number" id="s-sets" class="form-input"></div><div class="form-group"><label>次数</label><input type="number" id="s-reps" class="form-input"></div><div class="form-group"><label>RPE (1-10)</label><input type="number" id="s-rpe" min="1" max="10" class="form-input"></div></div>
+        <button class="btn btn-primary" id="save-strength-btn">➕ 添加动作</button>
+      </div>
+      <div class="card"><h2>📋 力量训练记录</h2><div class="form-row"><div class="form-group"><label>筛选日期</label><input type="date" id="s-filter-date" class="form-input"></div></div><div id="strength-list" class="workout-list"></div></div>
+      <div class="card"><h2>📊 力量训练图表</h2><div id="chart-strength" class="chart-box"></div></div>
+    </div>
+    <div id="tab-cardio" class="tab-panel">
+      <div class="card"><h2>🏃 添加有氧训练</h2>
+        <div class="form-row"><div class="form-group"><label>日期</label><input type="date" id="c-date" class="form-input"></div><div class="form-group"><label>运动类型</label><input type="text" id="c-type" class="form-input" placeholder="跑步、骑行..."><div id="c-type-history" class="history-suggestions"></div></div></div>
+        <div class="form-row"><div class="form-group"><label>距离 (km)</label><input type="number" id="c-distance" step="0.01" class="form-input"></div><div class="form-group"><label>时长 (分钟)</label><input type="number" id="c-duration" class="form-input"></div><div class="form-group"><label>平均心率</label><input type="number" id="c-hr" class="form-input"></div><div class="form-group"><label>自觉劳累 (1-10)</label><input type="number" id="c-effort" min="1" max="10" class="form-input"></div></div>
+        <div style="margin-bottom:12px;color:var(--text2);font-size:.9rem">配速：<strong id="c-pace">--</strong> | 卡路里：<strong id="c-cal">--</strong></div>
+        <div class="form-row"><div class="form-group"><label>上传图片（AI解析）</label><input type="file" id="c-image" accept="image/*" class="form-input"></div><button class="btn btn-accent" id="analyze-image-btn">🔍 分析图片并填表</button></div>
+        <button class="btn btn-primary" id="save-cardio-btn">➕ 添加记录</button>
+      </div>
+      <div class="card"><h2>📋 有氧训练记录</h2><div id="cardio-list" class="workout-list"></div></div>
+      <div class="card"><h2>📊 有氧训练图表</h2><div id="chart-cardio-detail" class="chart-box"></div></div>
+    </div>
+    <div id="tab-tdee" class="tab-panel">
+      <div class="card"><h2>⚡ BMR / TDEE 计算器</h2>
+        <div class="form-row"><div class="form-group"><label>性别</label><select id="tdee-gender" class="form-input"><option value="male">男</option><option value="female">女</option></select></div><div class="form-group"><label>年龄</label><input type="number" id="tdee-age" class="form-input"></div></div>
+        <div class="form-row"><div class="form-group"><label>身高 (cm)</label><input type="number" id="tdee-height" step="0.1" class="form-input"></div><div class="form-group"><label>体重 (kg)</label><input type="number" id="tdee-weight" step="0.1" class="form-input"></div></div>
+        <div class="form-row"><div class="form-group"><label>活动系数（推荐）</label><input type="number" id="tdee-factor" step="0.05" class="form-input" readonly></div><div class="form-group"><label>手动系数</label><input type="number" id="tdee-factor-manual" step="0.05" class="form-input" placeholder="1.2~2.0"></div></div>
+        <button class="btn btn-primary" id="calc-tdee-btn">计算 TDEE</button>
+        <div style="margin-top:16px;background:var(--bg2);padding:16px;border-radius:12px"><div>BMR = <strong id="tdee-bmr">--</strong> kcal/天</div><div>TDEE = <strong id="tdee-tdee">--</strong> kcal/天</div><div style="margin-top:8px;font-size:.85rem;color:var(--text2)">推荐系数基于最近7天训练量自动估算</div></div>
+      </div>
+    </div>
+    <div id="tab-ai" class="tab-panel">
+      <div class="card"><h2>⚙️ API 配置</h2>
+        <div class="form-row"><div class="form-group" style="flex:2"><label>API 地址</label><input type="text" id="ai-url" class="form-input" placeholder="https://api.deepseek.com/v1/chat/completions"></div><div class="form-group" style="flex:1"><label>模型名</label><input type="text" id="ai-model" class="form-input" placeholder="deepseek-chat"></div></div>
+        <div class="form-row"><div class="form-group"><label>API Key</label><input type="password" id="ai-key" class="form-input" placeholder="sk-..."></div></div>
+        <button class="btn btn-outline btn-sm" id="save-ai-config">保存配置</button>
+      </div>
+      <div class="card"><h2>🤖 AI 训练建议</h2><p style="color:var(--text2);margin-bottom:12px;font-size:.9rem">基于你近期的身体指标和训练数据，AI 将生成个性化建议。</p><button class="btn btn-accent" id="ai-gen-btn">🧠 生成建议</button><div style="margin-top:16px"><div id="ai-output" class="ai-output">暂无分析结果，请先配置 API 并点击"生成建议"。</div></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ========== 配置 ==========
+  const SUPABASE_URL = 'https://nzluoapijcttrgldycgu.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56bHVvYXBpamN0dHJnbGR5Y2d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MzUwMjUsImV4cCI6MjA5NjQxMTAyNX0.SVXgN62By1-AncE-WgiA_2jGjJ7c2okDumM62baw2M0';
+  let supabase = null;
+  try { supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { console.error(e); }
+
+  let currentUser = null;
+  let bodyMetricsCache = [], strengthCache = [], cardioCache = [];
+  let chartInstances = {};
+  let realtimeChannel = null;
+  let historyActions = [], historyTypes = [];
+
+  // ========== 工具 ==========
+  function toast(msg, type='info') {
+    const c = document.getElementById('toast-container');
+    if (!c) return;
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+  }
+  function todayStr() { return new Date().toISOString().slice(0,10); }
+  function val(id) { const v = document.getElementById(id)?.value; return v === '' ? null : parseFloat(v); }
+  function strVal(id) { return document.getElementById(id)?.value.trim() || ''; }
+  function setToday(id) { const el = document.getElementById(id); if (el) el.value = todayStr(); }
+  function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])); }
+
+  if (window.location.protocol === 'file:') document.getElementById('protocol-warning')?.style.display = 'block';
+
+  // ========== 认证 ==========
+  async function handleLogin() {
+    if (!supabase) return toast('Supabase未初始化', 'error');
+    const email = document.getElementById('login-email').value.trim();
+    const pwd = document.getElementById('login-password').value;
+    if (!email || !pwd) return toast('请填写邮箱和密码', 'error');
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd });
+      if (error) throw error;
+      currentUser = data.user;
+      enterApp();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+  async function handleRegister() {
+    if (!supabase) return toast('Supabase未初始化', 'error');
+    const email = document.getElementById('reg-email').value.trim();
+    const pwd = document.getElementById('reg-password').value;
+    if (!email || !pwd || pwd.length < 6) return toast('邮箱/密码错误或密码过短', 'error');
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password: pwd });
+      if (error) throw error;
+      if (data.user && !data.session) toast('注册成功，请登录', 'success');
+      else { currentUser = data.user; enterApp(); }
+    } catch (e) { toast(e.message, 'error'); }
+  }
+  async function handleLogout() {
+    if (realtimeChannel) await realtimeChannel.unsubscribe();
+    if (supabase) await supabase.auth.signOut();
+    currentUser = null;
+    document.getElementById('app')?.classList.remove('show');
+    document.getElementById('auth-page')?.classList.add('show');
+  }
+  function toggleAuthMode(mode) {
+    const loginDiv = document.getElementById('auth-form-login');
+    const regDiv = document.getElementById('auth-form-register');
+    if (loginDiv && regDiv) {
+      loginDiv.style.display = mode === 'login' ? 'block' : 'none';
+      regDiv.style.display = mode === 'register' ? 'block' : 'none';
+    }
+    document.getElementById('auth-error').textContent = '';
+  }
+  function enterApp() {
+    document.getElementById('auth-page')?.classList.remove('show');
+    document.getElementById('app')?.classList.add('show');
+    document.getElementById('user-email-display').innerText = currentUser.email;
+    setToday('m-date'); setToday('s-date'); setToday('c-date');
+    loadAllData().then(() => {
+      subscribeToRealtime();
+      loadHistory();
+      updateTDEEFactor();
+    });
+    drawBodyModel();
+    initSkinfoldUI();
+  }
+
+  // ========== Realtime ==========
+  async function subscribeToRealtime() {
+    if (!supabase || !currentUser) return;
+    if (realtimeChannel) await realtimeChannel.unsubscribe();
+    realtimeChannel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics' }, () => refreshBodyMetrics())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'strength_workouts' }, () => refreshStrengthWorkouts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cardio_workouts' }, () => refreshCardioWorkouts())
+      .subscribe();
+  }
+  async function refreshBodyMetrics() { await loadBodyMetrics(); renderDashboard(); }
+  async function refreshStrengthWorkouts() { await loadStrengthWorkouts(); renderDashboard(); }
+  async function refreshCardioWorkouts() { await loadCardioWorkouts(); renderDashboard(); }
+
+  // ========== 数据加载 ==========
+  async function loadAllData() {
+    await Promise.all([loadBodyMetrics(), loadStrengthWorkouts(), loadCardioWorkouts()]);
+    renderDashboard();
+  }
+  async function loadBodyMetrics() {
+    if (!supabase || !currentUser) return;
+    try {
+      const { data, error } = await supabase.from('body_metrics').select('*').eq('user_id', currentUser.id).order('date', { ascending: true });
+      if (error) throw error;
+      bodyMetricsCache = data || [];
+      renderMetricsTable();
+      renderGirthChart();
+      renderWeightChart();
+    } catch (e) { toast('加载身体指标失败: ' + e.message, 'error'); }
+  }
+  async function loadStrengthWorkouts() {
+    if (!supabase || !currentUser) return;
+    try {
+      const { data, error } = await supabase.from('strength_workouts').select('*').eq('user_id', currentUser.id).order('workout_date', { ascending: false });
+      if (error) throw error;
+      strengthCache = data || [];
+      renderStrengthList();
+      renderStrengthChart();
+      renderVolumeChart();
+    } catch (e) { toast('加载力量训练失败: ' + e.message, 'error'); }
+  }
+  async function loadCardioWorkouts() {
+    if (!supabase || !currentUser) return;
+    try {
+      const { data, error } = await supabase.from('cardio_workouts').select('*').eq('user_id', currentUser.id).order('workout_date', { ascending: false });
+      if (error) throw error;
+      cardioCache = data || [];
+      renderCardioList();
+      renderCardioDetailChart();
+      renderCardioChart();
+    } catch (e) { toast('加载有氧训练失败: ' + e.message, 'error'); }
+  }
+
+  // ========== 身体指标 ==========
+  async function saveBodyMetrics() {
+    const date = strVal('m-date');
+    if (!date) return toast('请选择日期', 'error');
+    const record = {
+      user_id: currentUser.id, date,
+      gender: strVal('m-gender'),
+      height: val('m-height'), weight: val('m-weight'),
+      chest: val('m-chest'), waist: val('m-waist'), hip: val('m-hip'),
+      arm_straight: val('m-arm-s'), arm_flexed: val('m-arm-f'), thigh: val('m-thigh'),
+      body_fat: val('m-bodyfat'),
+      skinfold_chest: val('skinfold-chest'), skinfold_abdomen: val('skinfold-abdomen'),
+      skinfold_thigh: val('skinfold-thigh'), skinfold_triceps: val('skinfold-triceps')
+    };
+    try {
+      const { error } = await supabase.from('body_metrics').upsert(record, { onConflict: 'user_id,date' });
+      if (error) throw error;
+      toast('身体指标已保存', 'success');
+      await loadBodyMetrics();
+      renderDashboard();
+    } catch (e) { toast('保存失败: ' + e.message, 'error'); }
+  }
+  function renderMetricsTable() {
+    const wrap = document.getElementById('metrics-table-wrap');
+    if (!wrap) return;
+    if (!bodyMetricsCache.length) { wrap.innerHTML = '<div class="empty-state"><div class="emoji">📏</div>暂无身体指标记录</div>'; return; }
+    const sorted = [...bodyMetricsCache].sort((a,b) => new Date(a.date) - new Date(b.date));
+    const fields = ['weight','body_fat','chest','waist','hip','arm_straight','arm_flexed','thigh'];
+    let html = `<table><thead><tr><th>日期</th>${fields.map(f => `<th>${f}</th>`).join('')}<th></th></tr></thead><tbody>`;
+    for (let i = 0; i < sorted.length; i++) {
+      const cur = sorted[i];
+      const prev = i > 0 ? sorted[i-1] : null;
+      html += `<tr><td>${cur.date}</td>`;
+      for (let f of fields) {
+        let valCur = cur[f];
+        let valPrev = prev ? prev[f] : null;
+        let arrow = '';
+        if (valCur !== null && valPrev !== null && valPrev !== undefined) {
+          if (valCur > valPrev) arrow = ' <span style="color:#ff6b6b">↑</span>';
+          else if (valCur < valPrev) arrow = ' <span style="color:#00b894">↓</span>';
+          else arrow = ' <span style="color:#9499b3">-</span>';
+        } else if (valCur !== null) arrow = ' <span style="color:#9499b3">-</span>';
+        html += `<td>${valCur ?? '-'}${arrow}</td>`;
+      }
+      html += `<td><button class="delete-btn" data-id="${cur.id}">🗑️</button></td></tr>`;
+    }
+    wrap.innerHTML = html + '</tbody></table>';
+    wrap.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (confirm('确认删除？')) {
+          await supabase.from('body_metrics').delete().eq('id', btn.dataset.id);
+          await loadBodyMetrics();
+          renderDashboard();
+        }
+      });
+    });
+  }
+
+  // ========== 力量训练 ==========
+  async function saveStrengthWorkout() {
+    const date = strVal('s-date'), action = strVal('s-action');
+    if (!date || !action) return toast('请填写日期和动作名称', 'error');
+    if (action) await saveHistoryItem('action_name', action);
+    const record = {
+      user_id: currentUser.id, workout_date: date, action_name: action,
+      weight_kg: val('s-weight'), sets: val('s-sets'), reps: val('s-reps'), rpe: val('s-rpe')
+    };
+    try {
+      const { error } = await supabase.from('strength_workouts').insert(record);
+      if (error) throw error;
+      toast('力量训练已添加', 'success');
+      document.getElementById('s-action').value = '';
+      document.getElementById('s-weight').value = '';
+      document.getElementById('s-sets').value = '';
+      document.getElementById('s-reps').value = '';
+      document.getElementById('s-rpe').value = '';
+      await loadStrengthWorkouts();
+      renderDashboard();
+    } catch (e) { toast('保存失败: ' + e.message, 'error'); }
+  }
+  async function deleteStrengthWorkout(id) {
+    if (!confirm('确认删除？')) return;
+    await supabase.from('strength_workouts').delete().eq('id', id);
+    await loadStrengthWorkouts();
+    renderDashboard();
+  }
+  function renderStrengthList() {
+    const wrap = document.getElementById('strength-list');
+    if (!wrap) return;
+    const filterDate = document.getElementById('s-filter-date')?.value || '';
+    let items = strengthCache;
+    if (filterDate) items = items.filter(i => i.workout_date === filterDate);
+    if (!items.length) { wrap.innerHTML = '<div class="empty-state"><div class="emoji">🏋️</div>暂无力量训练记录</div>'; return; }
+    let html = '';
+    items.forEach(r => {
+      html += `<div class="workout-item"><div class="info"><span class="name">${escapeHtml(r.action_name)}</span><span class="detail">${r.workout_date} | ${r.weight_kg ?? '-'}kg × ${r.sets ?? '-'}组 × ${r.reps ?? '-'}次 | RPE ${r.rpe ?? '-'}</span></div><div class="actions"><button class="delete-btn" data-id="${r.id}">🗑️</button></div></div>`;
+    });
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteStrengthWorkout(btn.dataset.id));
+    });
+  }
+
+  // ========== 有氧训练 ==========
+  async function saveCardioWorkout() {
+    const date = strVal('c-date'), type = strVal('c-type');
+    if (!date || !type) return toast('请填写日期和运动类型', 'error');
+    if (type) await saveHistoryItem('activity_type', type);
+    const record = {
+      user_id: currentUser.id, workout_date: date, activity_type: type,
+      distance_km: val('c-distance'), duration_min: val('c-duration'),
+      avg_heart_rate: val('c-hr'), perceived_effort: val('c-effort')
+    };
+    try {
+      const { error } = await supabase.from('cardio_workouts').insert(record);
+      if (error) throw error;
+      toast('有氧训练已添加', 'success');
+      document.getElementById('c-type').value = '';
+      document.getElementById('c-distance').value = '';
+      document.getElementById('c-duration').value = '';
+      document.getElementById('c-hr').value = '';
+      document.getElementById('c-effort').value = '';
+      document.getElementById('c-pace').textContent = '--';
+      document.getElementById('c-cal').textContent = '--';
+      await loadCardioWorkouts();
+      renderDashboard();
+    } catch (e) { toast('保存失败: ' + e.message, 'error'); }
+  }
+  async function deleteCardioWorkout(id) {
+    if (!confirm('确认删除？')) return;
+    await supabase.from('cardio_workouts').delete().eq('id', id);
+    await loadCardioWorkouts();
+    renderDashboard();
+  }
+  function renderCardioList() {
+    const wrap = document.getElementById('cardio-list');
+    if (!wrap) return;
+    if (!cardioCache.length) { wrap.innerHTML = '<div class="empty-state"><div class="emoji">🏃</div>暂无有氧训练记录</div>'; return; }
+    let html = '';
+    cardioCache.forEach(r => {
+      const pace = calcPace(r.distance_km, r.duration_min);
+      const cal = calcCalories(r.distance_km, r.duration_min);
+      html += `<div class="workout-item"><div class="info"><span class="name">${escapeHtml(r.activity_type)}</span><span class="detail">${r.workout_date} | ${r.distance_km ?? '-'}km | ${r.duration_min ?? '-'}分钟 | 心率${r.avg_heart_rate ?? '-'} | 配速${pace} | ${cal}kcal</span></div><div class="actions"><button class="delete-btn" data-id="${r.id}">🗑️</button></div></div>`;
+    });
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteCardioWorkout(btn.dataset.id));
+    });
+  }
+  function calcPace(dist, dur) {
+    if (!dist || !dur || dist <= 0 || dur <= 0) return '--';
+    const p = dur / dist, m = Math.floor(p), s = Math.round((p - m) * 60);
+    return `${m}'${s.toString().padStart(2,'0')}"`;
+  }
+  function calcCalories(dist, dur) {
+    if (!dist || !dur) return '--';
+    return Math.round(dist * 70);
+  }
+
+  // ========== 历史输入 ==========
+  async function loadHistory() {
+    if (!supabase || !currentUser) return;
+    const { data, error } = await supabase.from('user_input_history').select('*').eq('user_id', currentUser.id);
+    if (error) console.error(error);
+    if (data) {
+      historyActions = data.filter(h => h.field_name === 'action_name').sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,8);
+      historyTypes = data.filter(h => h.field_name === 'activity_type').sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,8);
+      renderHistorySuggestions();
+    }
+  }
+  async function saveHistoryItem(field, value) {
+    if (!value || !currentUser) return;
+    const { error } = await supabase.from('user_input_history').upsert(
+      { user_id: currentUser.id, field_name: field, value: value, updated_at: new Date() },
+      { onConflict: 'user_id,field_name,value' }
+    );
+    if (error) console.error(error);
+    else loadHistory();
+  }
+  function renderHistorySuggestions() {
+    const actionDiv = document.getElementById('s-action-history');
+    const typeDiv = document.getElementById('c-type-history');
+    if (actionDiv) actionDiv.innerHTML = historyActions.map(h => `<span data-value="${escapeHtml(h.value)}">${escapeHtml(h.value)}</span>`).join('');
+    if (typeDiv) typeDiv.innerHTML = historyTypes.map(h => `<span data-value="${escapeHtml(h.value)}">${escapeHtml(h.value)}</span>`).join('');
+    document.querySelectorAll('#s-action-history span, #c-type-history span').forEach(span => {
+      span.addEventListener('click', () => {
+        const input = span.closest('.card')?.querySelector('input');
+        if (input) input.value = span.dataset.value;
+      });
+    });
+  }
+
+  // ========== 体脂钳 ==========
+  function initSkinfoldUI() {
+    const container = document.getElementById('skinfold-fields');
+    const genderSelect = document.getElementById('m-gender');
+    function renderFields() {
+      const gender = genderSelect.value;
+      if (gender === 'male') {
+        container.innerHTML = `<div class="form-row"><div class="form-group"><label>胸部皮褶 (mm)</label><input type="number" id="skinfold-chest" step="0.5" class="form-input"></div>
+        <div class="form-group"><label>腹部皮褶 (mm)</label><input type="number" id="skinfold-abdomen" step="0.5" class="form-input"></div>
+        <div class="form-group"><label>大腿皮褶 (mm)</label><input type="number" id="skinfold-thigh" step="0.5" class="form-input"></div></div>`;
+      } else {
+        container.innerHTML = `<div class="form-row"><div class="form-group"><label>三头肌皮褶 (mm)</label><input type="number" id="skinfold-triceps" step="0.5" class="form-input"></div>
+        <div class="form-group"><label>腹部皮褶 (mm)</label><input type="number" id="skinfold-abdomen" step="0.5" class="form-input"></div>
+        <div class="form-group"><label>大腿皮褶 (mm)</label><input type="number" id="skinfold-thigh" step="0.5" class="form-input"></div></div>`;
+      }
+      const inputs = container.querySelectorAll('input');
+      inputs.forEach(i => i.addEventListener('input', computeBodyFatFromSkinfold));
+    }
+    genderSelect.addEventListener('change', renderFields);
+    renderFields();
+  }
+  function computeBodyFatFromSkinfold() {
+    const gender = document.getElementById('m-gender').value;
+    let sum = 0;
+    let count = 0;
+    if (gender === 'male') {
+      const chest = val('skinfold-chest'); if (chest) { sum += chest; count++; }
+      const abdomen = val('skinfold-abdomen'); if (abdomen) { sum += abdomen; count++; }
+      const thigh = val('skinfold-thigh'); if (thigh) { sum += thigh; count++; }
+    } else {
+      const triceps = val('skinfold-triceps'); if (triceps) { sum += triceps; count++; }
+      const abdomen = val('skinfold-abdomen'); if (abdomen) { sum += abdomen; count++; }
+      const thigh = val('skinfold-thigh'); if (thigh) { sum += thigh; count++; }
+    }
+    if (count === 3) {
+      let bodyDensity;
+      if (gender === 'male') bodyDensity = 1.10938 - (0.0008267 * sum) + (0.0000016 * sum * sum);
+      else bodyDensity = 1.0994921 - (0.0009929 * sum) + (0.0000023 * sum * sum);
+      let bodyFat = (495 / bodyDensity) - 450;
+      bodyFat = Math.min(50, Math.max(5, bodyFat));
+      document.getElementById('m-bodyfat').value = bodyFat.toFixed(1);
+    } else {
+      document.getElementById('m-bodyfat').value = '';
+    }
+  }
+
+  // ========== TDEE ==========
+  async function updateTDEEFactor() {
+    if (!currentUser) return;
+    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const strength7 = strengthCache.filter(s => new Date(s.workout_date) >= sevenDaysAgo);
+    const cardio7 = cardioCache.filter(c => new Date(c.workout_date) >= sevenDaysAgo);
+    const totalVolume = strength7.reduce((sum, s) => sum + (s.weight_kg || 0) * (s.sets || 0) * (s.reps || 0), 0);
+    const totalCalories = cardio7.reduce((sum, c) => sum + (c.distance_km || 0) * 70, 0);
+    const score = (totalVolume / 1000) + (totalCalories / 100);
+    let factor = 1.2;
+    if (score < 5) factor = 1.2;
+    else if (score < 20) factor = 1.375;
+    else if (score < 50) factor = 1.55;
+    else if (score < 100) factor = 1.725;
+    else factor = 1.9;
+    const factorInput = document.getElementById('tdee-factor');
+    if (factorInput) factorInput.value = factor.toFixed(2);
+  }
+  function computeTDEE() {
+    const gender = document.getElementById('tdee-gender').value;
+    const age = val('tdee-age');
+    const height = val('tdee-height');
+    const weight = val('tdee-weight');
+    if (!age || !height || !weight) return toast('请填写完整信息', 'error');
+    let bmr = (gender === 'male') ? (10*weight + 6.25*height - 5*age + 5) : (10*weight + 6.25*height - 5*age - 161);
+    let factor = val('tdee-factor-manual');
+    if (!factor) factor = parseFloat(document.getElementById('tdee-factor').value) || 1.2;
+    const tdee = bmr * factor;
+    document.getElementById('tdee-bmr').innerText = Math.round(bmr);
+    document.getElementById('tdee-tdee').innerText = Math.round(tdee);
+  }
+
+  // ========== 图片分析 ==========
+  async function analyzeImage() {
+    const fileInput = document.getElementById('c-image');
+    if (!fileInput.files.length) return toast('请先选择图片', 'error');
+    const file = fileInput.files[0];
+    const base64 = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+    const aiConfig = JSON.parse(localStorage.getItem('ai_config') || '{}');
+    if (!aiConfig.url || !aiConfig.key) return toast('请先配置 AI API 地址和 Key', 'error');
+    toast('正在调用 AI 分析图片...', 'info');
+    try {
+      const response = await fetch('/api/analyze-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: base64,
+          apiUrl: aiConfig.url,
+          apiKey: aiConfig.key,
+          model: aiConfig.model || 'deepseek-chat'
+        })
+      });
+      if (!response.ok) throw new Error('分析失败');
+      const data = await response.json();
+      if (data.distance) document.getElementById('c-distance').value = data.distance;
+      if (data.duration) document.getElementById('c-duration').value = data.duration;
+      if (data.heartrate) document.getElementById('c-hr').value = data.heartrate;
+      toast('已自动填表，请核对', 'success');
+    } catch (e) {
+      toast('图片分析失败: ' + e.message, 'error');
+    }
+  }
+
+  // ========== AI 建议 ==========
+  async function generateAIAdvice() {
+    const config = JSON.parse(localStorage.getItem('ai_config') || '{}');
+    if (!config.url || !config.key) return toast('请先配置 API 地址和密钥', 'error');
+    const btn = document.getElementById('ai-gen-btn');
+    const outputDiv = document.getElementById('ai-output');
+    if (btn) btn.disabled = true;
+    if (outputDiv) outputDiv.textContent = '正在分析数据，请稍候...';
+    let summary = '## 近期身体指标\n';
+    bodyMetricsCache.slice(-5).forEach(r => { summary += `${r.date}: 体重${r.weight??'-'}kg, 体脂${r.body_fat??'-'}%, 胸围${r.chest??'-'}cm, 腰围${r.waist??'-'}cm, 臀围${r.hip??'-'}cm\n`; });
+    summary += '\n## 近期力量训练\n';
+    strengthCache.slice(0,10).forEach(r => { summary += `${r.workout_date}: ${r.action_name} ${r.weight_kg??'-'}kg×${r.sets??'-'}组×${r.reps??'-'}次 RPE${r.rpe??'-'}\n`; });
+    summary += '\n## 近期有氧训练\n';
+    cardioCache.slice(0,10).forEach(r => { summary += `${r.workout_date}: ${r.activity_type} ${r.distance_km??'-'}km ${r.duration_min??'-'}分钟 心率${r.avg_heart_rate??'-'}\n`; });
+    try {
+      const response = await fetch(config.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.key}` },
+        body: JSON.stringify({
+          model: config.model || 'deepseek-chat',
+          messages: [
+            { role: 'system', content: '你是一位专业健身教练，擅长分析训练数据并给出个性化建议。请用中文回答。' },
+            { role: 'user', content: `请根据以下健身数据给出建议（身体指标分析、力量训练建议、有氧建议、营养建议、行动计划）：\n${summary}` }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+      if (!response.ok) throw new Error(`API 请求失败 (${response.status})`);
+      const result = await response.json();
+      if (outputDiv) outputDiv.textContent = result.choices?.[0]?.message?.content || '未获取到有效回复';
+    } catch (e) {
+      if (outputDiv) outputDiv.textContent = '生成失败：' + e.message;
+      toast('AI 分析失败', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // ========== 图表 ==========
+  function getChart(id) {
+    if (!chartInstances[id]) { const dom = document.getElementById(id); if (!dom) return null; chartInstances[id] = echarts.init(dom, 'dark'); }
+    return chartInstances[id];
+  }
+  function renderWeightChart() {
+    const chart = getChart('chart-weight'); if (!chart) return;
+    chart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: ['体重(kg)','体脂(%)'] }, xAxis: { type: 'category', data: bodyMetricsCache.map(r=>r.date) }, yAxis: [{ type: 'value', name: 'kg' },{ type: 'value', name: '%' }], series: [{ name: '体重(kg)', type: 'line', data: bodyMetricsCache.map(r=>r.weight) },{ name: '体脂(%)', type: 'line', data: bodyMetricsCache.map(r=>r.body_fat), yAxisIndex: 1 }] }, true);
+  }
+  function renderVolumeChart() {
+    const chart = getChart('chart-volume'); if (!chart) return;
+    const volMap = {};
+    strengthCache.forEach(r => { volMap[r.workout_date] = (volMap[r.workout_date]||0) + (r.weight_kg||0)*(r.sets||0)*(r.reps||0); });
+    const dates = Object.keys(volMap).sort();
+    chart.setOption({ xAxis: { type: 'category', data: dates }, yAxis: { name: '训练量(kg)' }, series: [{ type: 'bar', data: dates.map(d=>volMap[d]) }] }, true);
+  }
+  function renderCardioChart() {
+    const chart = getChart('chart-cardio'); if (!chart) return;
+    const distMap = {};
+    cardioCache.forEach(r => { distMap[r.workout_date] = (distMap[r.workout_date]||0)+(r.distance_km||0); });
+    const dates = Object.keys(distMap).sort();
+    let cum = 0;
+    chart.setOption({ xAxis: { type: 'category', data: dates }, yAxis: { name: '累计km' }, series: [{ type: 'line', data: dates.map(d=>{ cum+=distMap[d]; return Math.round(cum*100)/100; }) }] }, true);
+  }
+  function renderRecentActivities() {
+    const wrap = document.getElementById('recent-activities');
+    if (!wrap) return;
+    const items = [];
+    bodyMetricsCache.slice(-5).reverse().forEach(r => items.push({date:r.date,text:`身体指标：体重${r.weight??'-'}kg，体脂${r.body_fat??'-'}%`,type:'body'}));
+    strengthCache.slice(0,5).forEach(r => items.push({date:r.workout_date,text:`力量：${r.action_name} ${r.weight_kg??'-'}kg×${r.sets??'-'}×${r.reps??'-'}`,type:'strength'}));
+    cardioCache.slice(0,5).forEach(r => items.push({date:r.workout_date,text:`有氧：${r.activity_type} ${r.distance_km??'-'}km / ${r.duration_min??'-'}min`,type:'cardio'}));
+    items.sort((a,b)=>b.date.localeCompare(a.date));
+    if (!items.length) { wrap.innerHTML='<div class="empty-state"><div class="emoji">📋</div>暂无记录</div>'; return; }
+    let html='';
+    items.slice(0,10).forEach(i => { const icon = i.type==='body'?'📏':i.type==='strength'?'🏋️':'🏃'; html+=`<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center"><span>${icon}</span><span class="tag">${i.date}</span><span style="flex:1">${i.text}</span></div>`; });
+    wrap.innerHTML = html;
+  }
+  function renderDashboard() { renderWeightChart(); renderVolumeChart(); renderCardioChart(); renderRecentActivities(); }
+  function renderGirthChart() {
+    const chart = getChart('chart-girth'); if (!chart) return;
+    const series = [{name:'胸围',key:'chest'},{name:'腰围',key:'waist'},{name:'臀围',key:'hip'},{name:'直臂围',key:'arm_straight'},{name:'屈臂围',key:'arm_flexed'},{name:'大腿围',key:'thigh'}];
+    chart.setOption({ xAxis: { type: 'category', data: bodyMetricsCache.map(r=>r.date) }, yAxis: { name: 'cm' }, series: series.map(s=>({ name: s.name, type: 'line', data: bodyMetricsCache.map(r=>r[s.key]) })) }, true);
+  }
+  function renderStrengthChart() {
+    const chart = getChart('chart-strength'); if (!chart) return;
+    const actionMap = {};
+    strengthCache.forEach(r => { if(!actionMap[r.action_name]) actionMap[r.action_name]=[]; actionMap[r.action_name].push({date:r.workout_date,weight:r.weight_kg}); });
+    const allDates = new Set();
+    Object.values(actionMap).forEach(arr=>arr.forEach(r=>allDates.add(r.date)));
+    const dates = [...allDates].sort();
+    const seriesArr = Object.entries(actionMap).map(([name,arr]) => {
+      const dm = {}; arr.forEach(r=>dm[r.date]=r.weight);
+      return { name, type: 'line', data: dates.map(d=>dm[d]??null) };
+    });
+    chart.setOption({ legend: { data: Object.keys(actionMap) }, xAxis: { type: 'category', data: dates }, yAxis: { name: 'kg' }, series: seriesArr }, true);
+  }
+  function renderCardioDetailChart() {
+    const chart = getChart('chart-cardio-detail'); if (!chart) return;
+    const dates = cardioCache.map(r=>r.workout_date).reverse(), dists = cardioCache.map(r=>r.distance_km).reverse(), durs = cardioCache.map(r=>r.duration_min).reverse();
+    chart.setOption({ legend: { data: ['距离(km)','时长(min)'] }, xAxis: { type: 'category', data: dates }, yAxis: [{ type: 'value', name: 'km' },{ type: 'value', name: 'min' }], series: [{ name: '距离(km)', type: 'bar', data: dists },{ name: '时长(min)', type: 'line', yAxisIndex: 1, data: durs }] }, true);
+  }
+  window.addEventListener('resize', () => { Object.values(chartInstances).forEach(c=>c&&c.resize&&c.resize()); });
+
+  // ========== 人体模型 ==========
+  const bodyPartCenters = { '胸部':{x:150,y:165},'左直臂':{x:82,y:190},'右直臂':{x:218,y:190}, '左屈臂':{x:70,y:210},'右屈臂':{x:230,y:210}, '腰部':{x:150,y:218},'臀部':{x:150,y:255},'左大腿':{x:125,y:310},'右大腿':{x:175,y:310} };
+  function drawBodyModel() {
+    const canvas = document.getElementById('bodyCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const parts = [
+      {name:'胸部',field:'chest',color:'#e17055',path:(c)=>{c.ellipse(150,165,48,28,0,0,Math.PI*2)}},
+      {name:'左直臂',field:'arm_straight',color:'#fdcb6e',path:(c)=>{c.ellipse(82,190,14,38,0.15,0,Math.PI*2)}},
+      {name:'右直臂',field:'arm_straight',color:'#fdcb6e',path:(c)=>{c.ellipse(218,190,14,38,-0.15,0,Math.PI*2)}},
+      {name:'左屈臂',field:'arm_flexed',color:'#e84393',path:(c)=>{c.ellipse(70,210,16,42,0.3,0,Math.PI*2)}},
+      {name:'右屈臂',field:'arm_flexed',color:'#e84393',path:(c)=>{c.ellipse(230,210,16,42,-0.3,0,Math.PI*2)}},
+      {name:'腰部',field:'waist',color:'#00cec9',path:(c)=>{c.ellipse(150,218,36,18,0,0,Math.PI*2)}},
+      {name:'臀部',field:'hip',color:'#6c5ce7',path:(c)=>{c.ellipse(150,255,44,22,0,0,Math.PI*2)}},
+      {name:'左大腿',field:'thigh',color:'#00b894',path:(c)=>{c.ellipse(125,310,18,42,0.08,0,Math.PI*2)}},
+      {name:'右大腿',field:'thigh',color:'#00b894',path:(c)=>{c.ellipse(175,310,18,42,-0.08,0,Math.PI*2)}}
+    ];
+    ctx.save(); ctx.strokeStyle='#4a4d6a'; ctx.lineWidth=2; ctx.lineJoin='round';
+    ctx.beginPath(); ctx.arc(150,60,28,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(140,88); ctx.lineTo(140,110); ctx.moveTo(160,88); ctx.lineTo(160,110); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(100,120); ctx.lineTo(200,120); ctx.lineTo(195,195); ctx.lineTo(186,240); ctx.lineTo(195,275);
+    ctx.lineTo(106,275); ctx.lineTo(114,240); ctx.lineTo(105,195); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(100,120); ctx.lineTo(72,150); ctx.lineTo(68,240); ctx.lineTo(85,240); ctx.lineTo(95,160); ctx.lineTo(105,195); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(200,120); ctx.lineTo(228,150); ctx.lineTo(232,240); ctx.lineTo(215,240); ctx.lineTo(205,160); ctx.lineTo(195,195); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(106,275); ctx.lineTo(100,360); ctx.lineTo(105,460); ctx.lineTo(125,460); ctx.lineTo(130,360); ctx.lineTo(150,275); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(195,275); ctx.lineTo(170,360); ctx.lineTo(165,460); ctx.lineTo(185,460); ctx.lineTo(190,360); ctx.lineTo(195,275); ctx.stroke();
+    ctx.restore();
+    parts.forEach(part => {
+      ctx.save(); ctx.beginPath(); part.path(ctx); ctx.fillStyle = part.color+'30'; ctx.fill(); ctx.strokeStyle = part.color; ctx.lineWidth=2; ctx.setLineDash([4,3]); ctx.stroke(); ctx.restore();
+      ctx.save(); ctx.fillStyle=part.color; ctx.font='11px sans-serif'; ctx.textAlign='center'; const center = bodyPartCenters[part.name]; if (center) ctx.fillText(part.name, center.x, center.y+4); ctx.restore();
+    });
+    canvas._parts = parts;
+  }
+  document.getElementById('bodyCanvas')?.addEventListener('click', function(e) {
+    const rect = this.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (this.width / rect.width);
+    const y = (e.clientY - rect.top) * (this.height / rect.height);
+    if (!this._parts) return;
+    const ctx = this.getContext('2d');
+    const fieldMap = { 'chest':'m-chest','waist':'m-waist','hip':'m-hip','arm_straight':'m-arm-s','arm_flexed':'m-arm-f','thigh':'m-thigh' };
+    for (let part of this._parts) {
+      ctx.beginPath(); part.path(ctx);
+      if (ctx.isPointInPath(x,y)) {
+        const inputId = fieldMap[part.field];
+        if (inputId) {
+          const el = document.getElementById(inputId);
+          if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); toast(`已选中：${part.name}，请输入围度`, 'info'); }
+        }
+        break;
+      }
+    }
+  });
+
+  // ========== 初始化 UI ==========
+  function initTabs() {
+    const tabs = document.querySelectorAll('.nav-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        if (!target) return;
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        const activePanel = document.getElementById(`tab-${target}`);
+        if (activePanel) activePanel.classList.add('active');
+        setTimeout(() => { Object.values(chartInstances).forEach(c => c && c.resize && c.resize()); }, 50);
+      });
+    });
+  }
+  function bindButtons() {
+    document.getElementById('login-btn')?.addEventListener('click', handleLogin);
+    document.getElementById('register-btn')?.addEventListener('click', handleRegister);
+    document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
+    document.getElementById('show-register')?.addEventListener('click', () => toggleAuthMode('register'));
+    document.getElementById('show-login')?.addEventListener('click', () => toggleAuthMode('login'));
+    document.getElementById('save-body-btn')?.addEventListener('click', saveBodyMetrics);
+    document.getElementById('save-strength-btn')?.addEventListener('click', saveStrengthWorkout);
+    document.getElementById('save-cardio-btn')?.addEventListener('click', saveCardioWorkout);
+    document.getElementById('analyze-image-btn')?.addEventListener('click', analyzeImage);
+    document.getElementById('calc-tdee-btn')?.addEventListener('click', computeTDEE);
+    document.getElementById('save-ai-config')?.addEventListener('click', () => {
+      localStorage.setItem('ai_config', JSON.stringify({ url: strVal('ai-url'), model: strVal('ai-model'), key: strVal('ai-key') }));
+      toast('配置已保存', 'success');
+    });
+    document.getElementById('ai-gen-btn')?.addEventListener('click', generateAIAdvice);
+    document.getElementById('s-filter-date')?.addEventListener('change', loadStrengthWorkouts);
+    ['c-distance','c-duration','c-hr'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => {
+        document.getElementById('c-pace').textContent = calcPace(val('c-distance'), val('c-duration'));
+        document.getElementById('c-cal').textContent = calcCalories(val('c-distance'), val('c-duration'));
+      });
+    });
+  }
+  function loadAIConfig() {
+    try { const c = JSON.parse(localStorage.getItem('ai_config') || '{}'); if (c.url) document.getElementById('ai-url').value = c.url; if (c.model) document.getElementById('ai-model').value = c.model; if (c.key) document.getElementById('ai-key').value = c.key; } catch(e) {}
+  }
+  async function init() {
+    if (!supabase) {
+      document.getElementById('loading-overlay')?.classList.add('hide');
+      toast('Supabase 初始化失败', 'error');
+      document.getElementById('auth-page')?.classList.add('show');
+      return;
+    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && session.user) { currentUser = session.user; enterApp(); }
+      else { document.getElementById('auth-page')?.classList.add('show'); }
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) { currentUser = session.user; enterApp(); }
+        else if (event === 'SIGNED_OUT') {
+          if (realtimeChannel) realtimeChannel.unsubscribe();
+          currentUser = null;
+          document.getElementById('app')?.classList.remove('show');
+          document.getElementById('auth-page')?.classList.add('show');
+        }
+      });
+      loadAIConfig();
+    } catch (e) { console.error(e); document.getElementById('auth-page')?.classList.add('show'); }
+    finally { setTimeout(() => document.getElementById('loading-overlay')?.classList.add('hide'), 300); }
+  }
+  document.addEventListener('DOMContentLoaded', () => { initTabs(); bindButtons(); init(); });
+})();
+</script>
+</body>
+</html>
