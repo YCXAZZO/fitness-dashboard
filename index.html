@@ -645,42 +645,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica N
 
   // ========== AI 建议 ==========
   async function generateAIAdvice() {
-    const config = JSON.parse(localStorage.getItem('ai_config') || '{}');
-    if (!config.url || !config.key) return toast('请先配置 API 地址和密钥', 'error');
-    const btn = document.getElementById('ai-gen-btn');
-    const outputDiv = document.getElementById('ai-output');
-    if (btn) btn.disabled = true;
-    if (outputDiv) outputDiv.textContent = '正在分析数据，请稍候...';
-    let summary = '## 近期身体指标\n';
-    bodyMetricsCache.slice(-5).forEach(r => { summary += `${r.date}: 体重${r.weight??'-'}kg, 体脂${r.body_fat??'-'}%, 胸围${r.chest??'-'}cm, 腰围${r.waist??'-'}cm, 臀围${r.hip??'-'}cm\n`; });
-    summary += '\n## 近期力量训练\n';
-    strengthCache.slice(0,10).forEach(r => { summary += `${r.workout_date}: ${r.action_name} ${r.weight_kg??'-'}kg×${r.sets??'-'}组×${r.reps??'-'}次 RPE${r.rpe??'-'}\n`; });
-    summary += '\n## 近期有氧训练\n';
-    cardioCache.slice(0,10).forEach(r => { summary += `${r.workout_date}: ${r.activity_type} ${r.distance_km??'-'}km ${r.duration_min??'-'}分钟 心率${r.avg_heart_rate??'-'}\n`; });
-    try {
-      const response = await fetch(config.url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.key}` },
-        body: JSON.stringify({
-          model: config.model || 'deepseek-chat',
-          messages: [
-            { role: 'system', content: '你是一位专业健身教练，擅长分析训练数据并给出个性化建议。请用中文回答。' },
-            { role: 'user', content: `请根据以下健身数据给出建议（身体指标分析、力量训练建议、有氧建议、营养建议、行动计划）：\n${summary}` }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000
-        })
-      });
-      if (!response.ok) throw new Error(`API 请求失败 (${response.status})`);
-      const result = await response.json();
-      if (outputDiv) outputDiv.textContent = result.choices?.[0]?.message?.content || '未获取到有效回复';
-    } catch (e) {
-      if (outputDiv) outputDiv.textContent = '生成失败：' + e.message;
-      toast('AI 分析失败', 'error');
-    } finally {
-      if (btn) btn.disabled = false;
-    }
+  const config = JSON.parse(localStorage.getItem('ai_config') || '{}');
+  if (!config.url || !config.key) return toast('请先配置 API 地址和密钥', 'error');
+  
+  const btn = document.getElementById('ai-gen-btn');
+  const outputDiv = document.getElementById('ai-output');
+  if (btn) btn.disabled = true;
+  if (outputDiv) outputDiv.textContent = '正在分析数据，请稍候...';
+
+  let summary = '## 近期身体指标\n';
+  bodyMetricsCache.slice(-5).forEach(r => { summary += `${r.date}: 体重${r.weight??'-'}kg, 体脂${r.body_fat??'-'}%, 胸围${r.chest??'-'}cm, 腰围${r.waist??'-'}cm, 臀围${r.hip??'-'}cm\n`; });
+  summary += '\n## 近期力量训练\n';
+  strengthCache.slice(0,10).forEach(r => { summary += `${r.workout_date}: ${r.action_name} ${r.weight_kg??'-'}kg×${r.sets??'-'}组×${r.reps??'-'}次 RPE${r.rpe??'-'}\n`; });
+  summary += '\n## 近期有氧训练\n';
+  cardioCache.slice(0,10).forEach(r => { summary += `${r.workout_date}: ${r.activity_type} ${r.distance_km??'-'}km ${r.duration_min??'-'}分钟 心率${r.avg_heart_rate??'-'}\n`; });
+
+  const messages = [
+    { role: 'system', content: '你是一位专业健身教练，擅长分析训练数据并给出个性化建议。请用中文回答。' },
+    { role: 'user', content: `请根据以下健身数据给出建议（身体指标分析、力量训练建议、有氧建议、营养建议、行动计划）：\n${summary}` }
+  ];
+
+  try {
+    const response = await fetch('/api/ai-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        targetUrl: config.url,
+        apiKey: config.key,
+        model: config.model || 'deepseek-v4-flash',
+        messages: messages
+      })
+    });
+
+    if (!response.ok) throw new Error(`代理请求失败 (${response.status})`);
+    const result = await response.json();
+    outputDiv.textContent = result.choices?.[0]?.message?.content || '未获取到有效回复';
+  } catch (e) {
+    outputDiv.textContent = '生成失败：' + e.message;
+    toast('AI 分析失败', 'error');
+  } finally {
+    btn.disabled = false;
   }
+}
 
   // ========== 图表 ==========
   function getChart(id) {
