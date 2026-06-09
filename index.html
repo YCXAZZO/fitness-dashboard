@@ -623,15 +623,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica N
     toast('正在调用 AI 分析图片...', 'info');
     try {
       const response = await fetch('/api/analyze-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: base64,
-          apiUrl: aiConfig.url,
-          apiKey: aiConfig.key,
-          model: aiConfig.model || 'deepseek-chat'
-        })
-      });
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ imageBase64: base64 })
+});
       if (!response.ok) throw new Error('分析失败');
       const data = await response.json();
       if (data.distance) document.getElementById('c-distance').value = data.distance;
