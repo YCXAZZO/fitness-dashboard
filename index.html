@@ -222,7 +222,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica N
   function setToday(id) { const el = document.getElementById(id); if (el) el.value = todayStr(); }
   function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])); }
 
-  if (window.location.protocol === 'file:') document.getElementById('protocol-warning')?.style.display = 'block';
+  if (window.location.protocol === 'file:') {
+  const el = document.getElementById('protocol-warning');
+  if (el) {
+    el.style.display = 'block';
+  }
+}
 
   // ========== 认证 ==========
   async function handleLogin() {
