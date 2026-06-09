@@ -11,7 +11,7 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.VOLC_API_KEY;
   const endpoint = process.env.VOLC_ENDPOINT_URL || 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
-  const model = process.env.VOLC_MODEL_NAME || 'doubao-vision-pro-32k';
+  const model = process.env.VOLC_MODEL_NAME || 'ep-20260609211618-wk96h';
 
   if (!apiKey) {
     console.error('Missing VOLC_API_KEY');
